@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
@@ -64,10 +65,10 @@ class AuthController extends Controller
             
             // Redirect based on role
             if ($user->role === 'admin') {
-                return redirect('/admin/dashboard');
+                return redirect('/admin/dashboard')->with('success', 'Welcome back, Admin!');
             }
             
-            return redirect('/home');
+            return redirect('/home')->with('success', 'Welcome back!');
         }
 
         return back()->withErrors([
@@ -79,33 +80,44 @@ class AuthController extends Controller
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+            'name' => 'required|string|max:255|unique:users',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|in:user,admin',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                Password::min(8)
+                    ->letters()
+                    ->mixedCase()
+                    ->numbers()
+            ],
+        ], [
+            'name.unique' => 'Username telah digunakan',
+            'email.unique' => 'Email telah digunakan',
+            'password.mixed_case' => 'Password harus mengandung huruf besar dan kecil',
+            'password.numbers' => 'Password harus mengandung angka'
         ]);
 
         if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
+            return back()
+                ->withErrors($validator)
+                ->withInput()
+                ->with('error_type', 'validation');
         }
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role,
+            'role' => 'user', // Default to user
         ]);
 
         Auth::login($user);
         
         $request->session()->regenerate();
 
-        // Redirect based on role
-        if ($user->role === 'admin') {
-            return redirect('/admin/dashboard');
-        }
-
-        return redirect('/home');
+        return redirect('/home')->with('success', 'Registration successful! Welcome to CV Analyzer.');
     }
 
     // Handle logout
@@ -116,6 +128,6 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login');
+        return redirect('/login')->with('success', 'Logout successful!');
     }
 }
